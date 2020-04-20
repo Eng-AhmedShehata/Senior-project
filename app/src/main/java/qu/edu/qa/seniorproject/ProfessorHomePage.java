@@ -11,11 +11,13 @@ import com.google.android.gms.tasks.OnSuccessListener;
 
 import android.provider.MediaStore;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.view.GravityCompat;
 import androidx.navigation.NavController;
 import androidx.navigation.NavDestination;
 import androidx.navigation.Navigation;
@@ -63,6 +65,8 @@ public class ProfessorHomePage extends AppCompatActivity {
     private TextView nav_email;
     private TextView nav_user ;
     private View hView;
+    private DrawerLayout drawer;
+    private NavigationView navigationView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,11 +78,8 @@ public class ProfessorHomePage extends AppCompatActivity {
         setSupportActionBar(toolbar);
 
 
-
-
-
-        DrawerLayout drawer = findViewById(R.id.drawer_layout_pro);
-        NavigationView navigationView = findViewById(R.id.nav_view_pro);
+        drawer = findViewById(R.id.drawer_layout_pro);
+        navigationView = findViewById(R.id.nav_view_pro);
 
         // Passing each menu ID as a set of Ids because each
         // menu should be considered as top level destinations.
@@ -101,6 +102,8 @@ public class ProfessorHomePage extends AppCompatActivity {
                 }
             }
         });
+
+
 
         //setting the profile image, title and email
         hView =  navigationView.getHeaderView(0);
@@ -156,21 +159,33 @@ public class ProfessorHomePage extends AppCompatActivity {
     }
 
 
-
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.home_page, menu);
         return true;
     }
+
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         switch (item.getItemId()) {
             case R.id.action_fav_navi :
                 startActivity(new Intent(this, FavouriteNavigationActivity.class));
                 break;
+            case android.R.id.home :
+                drawer.openDrawer(GravityCompat.START);
+                break;
         }
         return true;
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (drawer.isDrawerOpen(GravityCompat.START)) {
+            drawer.closeDrawers();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     @Override
