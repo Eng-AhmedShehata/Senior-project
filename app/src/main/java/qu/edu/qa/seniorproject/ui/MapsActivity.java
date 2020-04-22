@@ -1,10 +1,7 @@
 package qu.edu.qa.seniorproject.ui;
 
 import androidx.appcompat.app.AppCompatActivity;
-
 import android.Manifest;
-import android.content.Intent;
-import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.AdapterView;
@@ -12,41 +9,48 @@ import android.widget.ArrayAdapter;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.intentfilter.androidpermissions.PermissionManager;
 import com.intentfilter.androidpermissions.models.DeniedPermissions;
-
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
 import qu.edu.qa.seniorproject.R;
 import qu.edu.qa.seniorproject.helper.GPSTracker;
+import qu.edu.qa.seniorproject.helper.MapUtil;
 import qu.edu.qa.seniorproject.localDB.AppDataBase;
 import qu.edu.qa.seniorproject.localDB.Location;
+import qu.edu.qa.seniorproject.model.map.MapResponse;
 
 import static java.util.Collections.singleton;
+import static qu.edu.qa.seniorproject.helper.MapUtil.BASE_URL;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, AdapterView.OnItemSelectedListener {
 
     private GoogleMap mMap;
-    private GPSTracker gpsTracker;
     public static double latitude;
     public static double longitude;
     public LatLng mlatLng;
     private Spinner mSpinner;
     private List<Location> mLocations;
-    private ExecutorService executorService;
+    private ExecutorService executorFav;
+    private ExecutorService executorHttp;
     private AppDataBase appDataBase;
     private Location location;
+    private android.location.Location mLastLocation;
+    private GPSTracker gpsTracker;
+    private RequestQueue mRequestQueue;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,6 +58,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         setContentView(R.layout.activity_maps);
         setSpinner();
         getLocalData();
+        // Set google maps
         grantPermission();
         appDataBase = AppDataBase.getInstance(this);
     }
@@ -76,10 +81,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     private void setSpinner() {
-        mSpinner = (Spinner) findViewById(R.id.spinner);
+        mSpinner = findViewById(R.id.spinner);
         mSpinner.setOnItemSelectedListener(this);
     }
 
+    
     private void grantPermission() {
         PermissionManager permissionManager = PermissionManager.getInstance(this);
         permissionManager.checkPermissions(singleton(Manifest.permission.ACCESS_COARSE_LOCATION), new PermissionManager.PermissionRequestListener() {
@@ -101,21 +107,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
-
+        //Google map setup
         mMap = googleMap;
         mMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
-        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(latitude, longitude), 15));
-        if (mlatLng != null) {
-            mMap.addMarker(new MarkerOptions().position(mlatLng).title("Your position"));
-        } else {
-            Toast.makeText(MapsActivity.this, "null", Toast.LENGTH_SHORT).show();
-        }
-        mMap.setOnMapClickListener(latLng -> {
-            mlatLng = latLng ;
-            mMap.clear();
-            mMap.addMarker(new MarkerOptions().position(latLng).title("Your position"));
-
-        });
+        mMap.getUiSettings().setZoomControlsEnabled(true);
+        mMap.setMyLocationEnabled(true);
+        mMap.getUiSettings().setMyLocationButtonEnabled(true);
+        // Show marker on the screen and adjust the zoom level
+        LatLng mOrigin = new LatLng(latitude, longitude);
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(mOrigin,15));
     }
 
     private void getCurrentLocation() {
@@ -129,6 +129,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             }
         }
     }
+    
 
     @Override
     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -141,23 +142,43 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
        if (location != null) {
            updateFavNum();
-           openGoogleMaps();
+           //openGoogleMaps();
+           setRoute(location);
        }
     }
 
-    private void openGoogleMaps() {
-        String uri = String.format(Locale.ENGLISH, "http://maps.google.com/maps?saddr=%f,%f(%s)&daddr=%f,%f (%s)",latitude, longitude, "Home Sweet Home", location.getLatitude(), location.getLong() , "Where the party is at");
-        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
-        intent.setPackage("com.google.android.apps.maps");
-        startActivity(intent);
+    private void setRoute(Location location) {
+        executorHttp = Executors.newSingleThreadExecutor();
+        executorHttp.execute(() -> makeRequest(location));
+    }
+
+    private void makeRequest(Location location) {
+        String strOrigin = "origin=" + latitude + "," + longitude;
+        String strDestination = "destination=" + location.getLatitude() + "," + location.getLong();
+        String APIKEY = getResources().getString(R.string.google_maps_key);
+        String param = strOrigin + "&" + strDestination + "&" +/*sensor + "&" + mode +*/ "key=";
+
+        mRequestQueue = Volley.newRequestQueue(this);
+        //String Request initialized
+        StringRequest mStringRequest = new StringRequest(Request.Method.GET, BASE_URL + param + APIKEY , response -> {
+            // Convert response to json
+            Gson mGson = new GsonBuilder().create();
+            MapResponse mapResponse = mGson.fromJson(response, MapResponse.class);
+            if (mMap != null) {
+                MapUtil.addMarkersToMap(mapResponse, mMap);
+            }
+
+        }, error -> Toast.makeText(this, error.getMessage(), Toast.LENGTH_SHORT).show());
+
+        mRequestQueue.add(mStringRequest);
     }
 
     private void updateFavNum() {
         int favNum = location.getFavNum() + 1;
         location.setFavNum(favNum);
-        executorService = Executors.newSingleThreadExecutor();
+        executorFav = Executors.newSingleThreadExecutor();
 
-        executorService.execute(() -> {
+        executorFav.execute(() -> {
             appDataBase.dataDao().updateFavNum(location);
         });
     }
@@ -171,13 +192,14 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (executorService != null) {
-            executorService.shutdown();
+        if (executorFav != null) {
+            executorFav.shutdown();
+        }
+        if (executorHttp != null) {
+            executorHttp.shutdown();
         }
     }
 
     @Override
-    public void onNothingSelected(AdapterView<?> parent) {
-
-    }
+    public void onNothingSelected(AdapterView<?> parent) { }
 }
