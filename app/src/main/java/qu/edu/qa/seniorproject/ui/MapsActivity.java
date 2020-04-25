@@ -153,10 +153,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     private void makeRequest(Location location) {
+        //"25.375273,51.49117"
         String strOrigin = "origin=" + latitude + "," + longitude;
         String strDestination = "destination=" + location.getLatitude() + "," + location.getLong();
         String APIKEY = getResources().getString(R.string.google_maps_key);
-        String param = strOrigin + "&" + strDestination + "&" +/*sensor + "&" + mode +*/ "key=";
+        String param = strOrigin + "&" + strDestination + "&" +"mode = walking &"+/*sensor + "&" + mode +*/ "key=";
 
         mRequestQueue = Volley.newRequestQueue(this);
         //String Request initialized

@@ -133,8 +133,12 @@ public class ProfessorHomePage extends AppCompatActivity {
         }catch (Exception e){
 
         }
-        nav_user.setText(user.getName());
-        nav_email.setText(user.getEmail());
+
+        if (user != null) {
+            nav_user.setText(user.getName());
+            nav_email.setText(user.getEmail());
+        }
+
     }
 
     @Override
